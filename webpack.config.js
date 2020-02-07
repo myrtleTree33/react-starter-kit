@@ -1,12 +1,14 @@
+const fs = require('fs');
 const path = require('path');
 const glob = require('glob');
 const webpack = require('webpack');
 
 // Share plguins
+const dotenv = require('dotenv');
+const dotenvExpand = require('dotenv-expand');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const PurgecssPlugin = require('purgecss-webpack-plugin');
-const Dotenv = require('dotenv-webpack');
 
 // Dev plugins
 const CaseSensitivePathsPlugin = require('case-sensitive-paths-webpack-plugin');
@@ -22,18 +24,18 @@ const CompressionPlugin = require('compression-webpack-plugin');
 const BrotliPlugin = require('brotli-webpack-plugin');
 const WorkboxPlugin = require('workbox-webpack-plugin');
 
-const getOptions = (env = {}) => ({
+const getOptions = () => ({
   // paths
   src: path.resolve(__dirname, 'src'),
   dist: path.resolve(__dirname, 'dist'),
   public: path.resolve(__dirname, 'public'),
   entry: path.resolve(__dirname, 'src', 'main.tsx'),
-  publicPath: '/',
+  publicPath: process.env.PUBLIC_PATH || '/',
 
   // dev server
-  https: env.HTTPS || false,
-  host: env.HOST || '0.0.0.0',
-  port: env.PORT || 3000
+  https: process.env.HTTPS || false,
+  host: process.env.HOST || '0.0.0.0',
+  port: process.env.PORT || 3000
 });
 
 const getStyleLoaders = isDevEnv => {
@@ -82,9 +84,39 @@ const getStyleLoaders = isDevEnv => {
 };
 
 module.exports = (env, argv) => {
-  const envName = argv.mode;
-  const isDevEnv = envName === 'development' ? true : false;
+  process.env.NODE_ENV = argv.mode;
+  process.env.BABEL_ENV = argv.mode;
+
+  const isDevEnv = argv.mode === 'development' ? true : false;
+  const dotenvFiles = [`.env.${argv.mode}.local`, `.env.${argv.mode}`, '.env'];
+  const environmentVariables = { NODE_ENV: argv.mode };
+
+  dotenvFiles.forEach(dotenvFile => {
+    console.log(dotenvFile);
+    if (fs.existsSync(dotenvFile)) {
+      const envConfig = dotenv.config({ path: dotenvFile });
+
+      dotenvExpand(envConfig);
+
+      if (envConfig.parsed) {
+        Object.keys(envConfig.parsed).forEach(
+          key => (environmentVariables[`${key}`] = envConfig.parsed[key])
+        );
+      }
+    }
+  });
+
   const options = getOptions(env);
+
+  environmentVariables['PUBLIC_PATH'] = options.publicPath;
+
+  const processEnv = {
+    'process.env': Object.keys(environmentVariables).reduce((env, key) => {
+      env[key] = JSON.stringify(environmentVariables[key]);
+
+      return env;
+    }, {})
+  };
 
   const config = {
     mode: isDevEnv ? 'development' : 'production',
@@ -119,10 +151,7 @@ module.exports = (env, argv) => {
               include: /src/,
               test: /\.(j|t)sx?$/,
               use: {
-                loader: 'babel-loader',
-                options: {
-                  envName
-                }
+                loader: 'babel-loader'
               }
             },
             getStyleLoaders(isDevEnv),
@@ -153,9 +182,15 @@ module.exports = (env, argv) => {
       modules: ['node_modules', 'src'],
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json']
     },
+    performance: false,
     target: 'web',
-    bail: true,
+    bail: !isDevEnv,
     cache: true,
+    stats: {
+      colors: true,
+      errors: true,
+      modules: false
+    },
     plugins: [
       !isDevEnv && new CleanWebpackPlugin(),
       new webpack.ProgressPlugin(),
@@ -176,15 +211,10 @@ module.exports = (env, argv) => {
               minifyJS: true,
               minifyCSS: true,
               minifyURLs: true
-            }
+            },
+        templateParameters: environmentVariables
       }),
-      new Dotenv({
-        path: `./.env.${envName}`,
-        safe: true,
-        systemvars: true,
-        silent: true,
-        defaults: './.env'
-      }),
+      new webpack.DefinePlugin(processEnv),
       !isDevEnv &&
         new CopyPlugin([
           {
@@ -224,20 +254,14 @@ module.exports = (env, argv) => {
         new WorkboxPlugin.GenerateSW({
           clientsClaim: true,
           exclude: [/\.map$/, /\.gz$/],
-          importWorkboxFrom: 'cdn',
+          // importWorkboxFrom: 'cdn',
           navigateFallback: '/index.html',
-          navigateFallbackBlacklist: [new RegExp('^/_'), new RegExp('/[^/]+\\.[^/]+$')],
+          navigateFallbackDenylist: [new RegExp('^/_'), new RegExp('/[^/]+\\.[^/]+$')],
           swDest: 'service-worker.js',
-          skipWaiting: true,
-          precacheManifestFilename: 'precache-manifest.[manifestHash].js'
+          skipWaiting: true
+          // precacheManifestFilename: 'precache-manifest.[manifestHash].js'
         })
     ].filter(Boolean),
-    stats: {
-      colors: true,
-      errors: true,
-      modules: false
-    },
-    performance: false,
     optimization: {
       removeAvailableModules: true,
       removeEmptyChunks: true,
