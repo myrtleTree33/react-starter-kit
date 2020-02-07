@@ -24,19 +24,53 @@ const CompressionPlugin = require('compression-webpack-plugin');
 const BrotliPlugin = require('brotli-webpack-plugin');
 const WorkboxPlugin = require('workbox-webpack-plugin');
 
-const getOptions = () => ({
-  // paths
-  src: path.resolve(__dirname, 'src'),
-  dist: path.resolve(__dirname, 'dist'),
-  public: path.resolve(__dirname, 'public'),
-  entry: path.resolve(__dirname, 'src', 'main.tsx'),
-  publicPath: process.env.PUBLIC_PATH || '/',
+const getEnvironmentVariables = (evnName) => {
+  const dotenvFiles = [`.env.${evnName}.local`, `.env.${evnName}`, '.env'];
+  const environmentVariables = { NODE_ENV: evnName };
 
-  // dev server
-  https: process.env.HTTPS || false,
-  host: process.env.HOST || '0.0.0.0',
-  port: process.env.PORT || 3000
-});
+  dotenvFiles.forEach(dotenvFile => {
+    if (fs.existsSync(dotenvFile)) {
+      const envConfig = dotenv.config({ path: dotenvFile });
+
+      dotenvExpand(envConfig);
+
+      if (envConfig.parsed) {
+        Object.keys(envConfig.parsed).forEach(
+          key => (environmentVariables[`${key}`] = envConfig.parsed[key])
+        );
+      }
+    }
+  });
+
+  const paths = {
+    src: path.resolve(__dirname, 'src'),
+    dist: path.resolve(__dirname, 'dist'),
+    public: path.resolve(__dirname, 'public'),
+    entry: path.resolve(__dirname, 'src', 'main.tsx'),
+    publicPath: process.env.PUBLIC_PATH || '/',
+
+    // dev server
+    https: process.env.HTTPS || false,
+    host: process.env.HOST || '0.0.0.0',
+    port: process.env.PORT || 3000
+  };
+
+  environmentVariables['PUBLIC_PATH'] = paths.publicPath;
+
+  const processEnv = {
+    'process.env': Object.keys(environmentVariables).reduce((env, key) => {
+      env[key] = JSON.stringify(environmentVariables[key]);
+
+      return env;
+    }, {})
+  };
+
+  return {
+    paths,
+    environmentVariables,
+    processEnv
+  };
+};
 
 const getStyleLoaders = isDevEnv => {
   if (isDevEnv) {
@@ -86,47 +120,19 @@ const getStyleLoaders = isDevEnv => {
 module.exports = (env, argv) => {
   process.env.NODE_ENV = argv.mode;
   process.env.BABEL_ENV = argv.mode;
-
   const isDevEnv = argv.mode === 'development' ? true : false;
-  const dotenvFiles = [`.env.${argv.mode}.local`, `.env.${argv.mode}`, '.env'];
-  const environmentVariables = { NODE_ENV: argv.mode };
 
-  dotenvFiles.forEach(dotenvFile => {
-    console.log(dotenvFile);
-    if (fs.existsSync(dotenvFile)) {
-      const envConfig = dotenv.config({ path: dotenvFile });
-
-      dotenvExpand(envConfig);
-
-      if (envConfig.parsed) {
-        Object.keys(envConfig.parsed).forEach(
-          key => (environmentVariables[`${key}`] = envConfig.parsed[key])
-        );
-      }
-    }
-  });
-
-  const options = getOptions(env);
-
-  environmentVariables['PUBLIC_PATH'] = options.publicPath;
-
-  const processEnv = {
-    'process.env': Object.keys(environmentVariables).reduce((env, key) => {
-      env[key] = JSON.stringify(environmentVariables[key]);
-
-      return env;
-    }, {})
-  };
+  const { paths, environmentVariables, processEnv } = getEnvironmentVariables(argv.mode);
 
   const config = {
-    mode: isDevEnv ? 'development' : 'production',
-    entry: options.entry,
+    mode: argv.mode,
+    entry: paths.entry,
     output: {
       filename: `static/js/[name]${isDevEnv ? '' : '.[contenthash:8]'}.js`,
       chunkFilename: `static/js/[name]${isDevEnv ? '' : '.[contenthash:8]'}.chunk.js`,
-      path: options.dist,
+      path: paths.dist,
       pathinfo: isDevEnv,
-      publicPath: options.publicPath
+      publicPath: paths.publicPath
     },
     module: {
       strictExportPresence: true,
@@ -197,7 +203,7 @@ module.exports = (env, argv) => {
       new HtmlWebpackPlugin({
         inject: true,
         template: './public/index.html',
-        baseUrl: options.publicPath,
+        baseUrl: paths.publicPath,
         minify: isDevEnv
           ? false
           : {
@@ -218,8 +224,8 @@ module.exports = (env, argv) => {
       !isDevEnv &&
         new CopyPlugin([
           {
-            from: options.public,
-            to: options.dist,
+            from: paths.public,
+            to: paths.dist,
             ignore: ['index.html']
           }
         ]),
@@ -228,7 +234,7 @@ module.exports = (env, argv) => {
         chunkFilename: `static/css/[name]${isDevEnv ? '' : '.[contenthash:8]'}.chunk.css`
       }),
       new PurgecssPlugin({
-        paths: glob.sync(`${options.src}/**/*`, { nodir: true })
+        paths: glob.sync(`${paths.src}/**/*`, { nodir: true })
       }),
       isDevEnv && new webpack.NamedModulesPlugin(),
       isDevEnv && new webpack.HotModuleReplacementPlugin(),
@@ -336,18 +342,18 @@ module.exports = (env, argv) => {
 
     config.devServer = {
       compress: true,
-      contentBase: options.src,
+      contentBase: paths.src,
       disableHostCheck: true,
       historyApiFallback: true,
-      https: options.https,
-      host: options.highlightCode,
+      https: paths.https,
+      host: paths.host,
       hot: true,
       inline: true,
       open: true,
       overlay: true,
-      port: options.port,
-      public: `http://localhost:${options.port}`,
-      publicPath: options.publicPath,
+      port: paths.port,
+      public: `http://localhost:${paths.port}`,
+      publicPath: paths.publicPath,
       stats: {
         colors: true,
         errors: true,

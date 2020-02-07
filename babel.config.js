@@ -1,5 +1,7 @@
 module.exports = function(api) {
-  const isDevEnv = api.env() === 'development' ? true : false;
+  api.cache(true);
+
+  const isDevEnv = process.env.BABEL_ENV === 'development' ? true : false;
 
   const presets = [
     [
