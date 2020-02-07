@@ -1,6 +1,7 @@
-/// <reference types="node" />
-/// <reference types="react" />
-/// <reference types="react-dom" />
+/// <reference types="@types/node" />
+/// <reference types="@types/react" />
+/// <reference types="@types/react-dom" />
+/// <reference types="@types/react-router" />
 
 declare namespace NodeJS {
   interface ProcessEnv {
@@ -66,3 +67,37 @@ declare module '*.module.sass' {
 interface NodeModule {
   hot: any;
 }
+
+interface AuthorizeRouteConfigComponentProps<Params extends { [K in keyof Params]?: string } = {}>
+  extends RouteComponentProps<Params> {
+  route?: AuthorizeRouteConfig;
+}
+
+interface AuthorizeProps {
+  isAuthenticated?: boolean;
+  restricted?: boolean;
+}
+
+interface ExtraProps {
+  authorize?: AuthorizeProps;
+  [propName: string]: any;
+}
+
+interface AuthorizeRouteConfig {
+  authorize?: AuthorizeProps;
+  key?: React.Key;
+  location?: Location;
+  component?: React.ComponentType<AuthorizeRouteConfigComponentProps<any>> | React.ComponentType;
+  path?: string | string[];
+  exact?: boolean;
+  strict?: boolean;
+  routes?: AuthorizeRouteConfig[];
+  render?: (props: AuthorizeRouteConfigComponentProps<any>) => React.ReactNode;
+  [propName: string]: any;
+}
+
+type AuthorizeAreaProps = {
+  routes?: AuthorizeRouteConfig[];
+  extraProps?: ExtraProps;
+  switchProps?: any;
+};

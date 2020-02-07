@@ -1,0 +1,74 @@
+import React from 'react';
+import { Switch, Route, Redirect } from 'react-router';
+import AppState from 'store';
+import { actionCreators } from 'store/Identity';
+import { useAppState } from 'utils/store';
+
+type AuthorizeProps = {
+  routes?: AuthorizeRouteConfig[];
+  extraProps?: ExtraProps;
+  switchProps?: {};
+};
+
+const AuthorizeView = ({ routes, extraProps = {}, switchProps = {} }: AuthorizeProps) => {
+  const { authorize, ...originalExtraProps } = extraProps;
+  const [state] = useAppState((appState: AppState) => appState.identity, actionCreators);
+
+  return routes ? (
+    <Switch {...switchProps}>
+      {routes.map((route, index) => (
+        <Route
+          key={route.key || index}
+          path={route.path}
+          exact={route.exact}
+          strict={route.strict}
+          render={props => {
+            const newAuthorize = {
+              ...authorize,
+              ...route.authorize,
+              ...(props as any).authorize
+            } || {
+              isAuthenticated: false,
+              restricted: false
+            };
+            const newExtraProps = {
+              ...originalExtraProps,
+              ...{
+                authorize: newAuthorize
+              }
+            };
+
+            if (state.isAuthenticated || !newAuthorize.restricted) {
+              if (route.render) return route.render({ ...props, ...newExtraProps, route: route });
+
+              const Component = route.component as any;
+
+              return <Component {...props} {...newExtraProps} route={route} />;
+            }
+
+            if (state.isAuthenticated && props.location.pathname.startsWith('/account/login'))
+              return (
+                <Redirect
+                  to={{
+                    pathname: '/',
+                    state: { from: props.location }
+                  }}
+                />
+              );
+
+            return (
+              <Redirect
+                to={{
+                  pathname: '/account/login',
+                  state: { from: props.location }
+                }}
+              />
+            );
+          }}
+        />
+      ))}
+    </Switch>
+  ) : null;
+};
+
+export default AuthorizeView;
